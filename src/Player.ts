@@ -143,8 +143,10 @@ export class Player {
   }
 
   public showdown(gameState: any): void {
+    console.log('Showdown game state', JSON.stringify(gameState))
+    return
     try {
-      console.log(`[Game ${gameState.game_id}] Showdown reached`);
+      console.log(`[Game ${gameState.game_id}] Showdown reached: `);
       
       // Find our player
       const ourPlayerId = gameState.players.find((p: any) => 
