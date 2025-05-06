@@ -6,59 +6,20 @@ export class Player {
   // Set version of our player
   public static readonly VERSION = "What Is Poker v1.0.0";
 
-  // Tracking data across game rounds
-  private gameHistory: {
-    gameId?: string;
-    roundIndex: number;
-    opponentProfiles: Map<string, OpponentProfile>;
-    roundHistory: RoundData[];
-  } = {
-    roundIndex: 0,
-    opponentProfiles: new Map(),
-    roundHistory: []
-  };
-
   public betRequest(gameState: any, betCallback: (bet: number) => void): void {
     try {
-      // Track the game ID for logging
-      if (!this.gameHistory.gameId && gameState.game_id) {
-        this.gameHistory.gameId = gameState.game_id;
-        this.logGameStart(gameState);
-      }
-      
-      // Create round data object to collect info during this round
-      const roundData: RoundData = {
-        roundId: this.gameHistory.roundIndex++,
-        gameId: gameState.game_id,
-        timestamp: new Date().toISOString(),
-        roundName: '',
-        potSize: gameState.pot,
-        communityCards: [],
-        playerActions: [],
-        ourDecision: {
-          handStrength: 0,
-          position: '',
-          betAmount: 0,
-          reasoning: '',
-        }
-      };
-
-      console.log(`[Game ${gameState.game_id}] Round ${roundData.roundId} starting`);
+      console.log(`[Game ${gameState.game_id}] Starting bet request`);
       
       // Find our player
       const ourPlayer = gameState.players[gameState.in_action];
-      const ourPlayerId = ourPlayer.id || ourPlayer.name;
       
       // Log active players and their stacks
-      this.logActivePlayers(gameState, roundData);
+      this.logActivePlayers(gameState);
       
       // Get our hole cards
       const holeCards = ourPlayer.hole_cards || [];
       if (!holeCards.length) {
         console.log(`[Game ${gameState.game_id}] No hole cards found, folding`);
-        roundData.ourDecision.reasoning = 'No hole cards available';
-        roundData.ourDecision.betAmount = 0;
-        this.logRoundData(roundData);
         betCallback(0);
         return;
       }
@@ -68,11 +29,9 @@ export class Player {
       
       // Get community cards
       const communityCards = gameState.community_cards || [];
-      roundData.communityCards = [...communityCards];
       
       // Calculate current round
       const pokerRound = this.calculatePokerRound(communityCards.length);
-      roundData.roundName = pokerRound;
       
       // Log community cards and round
       if (communityCards.length > 0) {
@@ -96,15 +55,10 @@ export class Player {
       
       // Hand strength evaluation
       const handStrength = this.evaluateHandStrength(holeCards, communityCards);
-      roundData.ourDecision.handStrength = handStrength;
       
       // Position evaluation (being in late position is better)
       const playerCount = gameState.players.filter((p: any) => p.status === 'active').length;
       const position = this.calculatePosition(gameState.dealer, gameState.in_action, playerCount);
-      roundData.ourDecision.position = position;
-      
-      // Track previous actions in this round
-      this.trackPlayerActions(gameState, roundData);
       
       // Decision making based on different factors
       const betAmount = this.makeBetDecision(
@@ -127,13 +81,7 @@ export class Player {
         toCall
       );
       
-      roundData.ourDecision.betAmount = betAmount;
-      roundData.ourDecision.reasoning = decisionReasoning;
-      
       console.log(`[Game ${gameState.game_id}] Betting ${betAmount} with hand strength ${handStrength} (${decisionReasoning})`);
-      
-      // Save round data to history
-      this.logRoundData(roundData);
       
       betCallback(betAmount);
     } catch (e) {
@@ -144,32 +92,15 @@ export class Player {
 
   public showdown(gameState: any): void {
     try {
-      console.log('Showdown game state', JSON.stringify(gameState));
-      
       console.log(`[Game ${gameState.game_id}] Showdown reached`);
       
       // Find our player (What Is Poker)
       const ourPlayer = gameState.players.find((p: any) => p.name === "What Is Poker" || p.version === Player.VERSION);
-      const ourPlayerId = ourPlayer?.id;
       
       if (!ourPlayer) {
         console.log('[Showdown] Could not find our player in the game state');
         return;
       }
-      
-      // Create showdown data object
-      const showdownData = {
-        gameId: gameState.game_id,
-        timestamp: new Date().toISOString(),
-        pot: gameState.pot || 0,
-        winners: [] as any[],
-        allHands: [] as any[],
-        ourResult: {
-          won: false,
-          handRank: '',
-          amountWon: 0
-        }
-      };
       
       // Log player hands
       console.log('[Showdown] Player hands:');
@@ -182,9 +113,7 @@ export class Player {
           continue;
         }
         
-        const playerId = player.id;
-        const isUs = playerId === ourPlayerId;
-        const playerProfile = this.getOrCreatePlayerProfile(String(playerId), player.name);
+        const isUs = player.id === ourPlayer.id;
         
         // Format player's hand
         const handString = this.formatCards(player.hole_cards);
@@ -196,52 +125,11 @@ export class Player {
         const isWinner = player.amount_won && player.amount_won > 0;
         const amountWon = player.amount_won || 0;
         
-        // Update player profile
-        if (isWinner) {
-          playerProfile.wins++;
-          playerProfile.totalWinnings += amountWon;
-          console.log(`[Showdown] Player ${player.name} won ${amountWon}`);
-        } else {
-          // Only count losses for active players or those who folded with cards
-          if (player.status === 'active' || player.status === 'folded') {
-            playerProfile.losses++;
-          }
-        }
-        
         // Log hand and result
         console.log(`[Showdown] ${isUs ? 'OUR HAND' : player.name}: ${handString} - ${handRank} ${isWinner ? `(WON: ${amountWon})` : ''}`);
-        
-        // Add to showdown data
-        const playerData = {
-          id: playerId,
-          name: player.name,
-          hand: [...player.hole_cards],
-          handRank,
-          isWinner,
-          amountWon,
-          status: player.status
-        };
-        
-        if (isWinner) {
-          showdownData.winners.push(playerData);
-        }
-        
-        if (isUs) {
-          showdownData.ourResult = {
-            won: isWinner,
-            handRank,
-            amountWon
-          };
-        }
-        
-        showdownData.allHands.push(playerData);
       }
       
-      // Log overall game stats
-      this.logGameStats(gameState);
-      
-      // Save showdown data
-      console.log(`[Game ${gameState.game_id}] Showdown data: ${JSON.stringify(showdownData)}`);
+      console.log(`[Game ${gameState.game_id}] Showdown complete`);
     } catch (e) {
       console.error('Error in showdown:', e);
     }
@@ -263,164 +151,14 @@ export class Player {
     }
   }
   
-  // Log game start information
-  private logGameStart(gameState: any): void {
-    console.log(`==============================================`);
-    console.log(`[Game ${gameState.game_id}] New game started with ${gameState.players.length} players`);
-    console.log(`==============================================`);
-    
-    // Log initial player information
-    for (const player of gameState.players) {
-      const playerId = player.id || player.name;
-      this.getOrCreatePlayerProfile(playerId, player.name);
-      console.log(`[Game ${gameState.game_id}] Player: ${player.name}, Stack: ${player.stack}`);
-    }
-  }
-  
   // Log active players in current round
-  private logActivePlayers(gameState: any, roundData: RoundData): void {
+  private logActivePlayers(gameState: any): void {
     const activePlayers = gameState.players.filter((p: any) => p.status === 'active');
     
     console.log(`[Game ${gameState.game_id}] Active players: ${activePlayers.length}`);
     for (const player of activePlayers) {
-      const playerId = player.id || player.name;
-      const playerProfile = this.getOrCreatePlayerProfile(playerId, player.name);
-      
-      // Track bet amount in current round
-      playerProfile.currentBet = player.bet || 0;
-      
       console.log(`[Game ${gameState.game_id}] Player: ${player.name}, Stack: ${player.stack}, Bet: ${player.bet}`);
     }
-  }
-  
-  // Get or create player profile for tracking
-  private getOrCreatePlayerProfile(playerId: string, playerName: string): OpponentProfile {
-    if (!this.gameHistory.opponentProfiles.has(playerId)) {
-      this.gameHistory.opponentProfiles.set(playerId, {
-        id: playerId,
-        name: playerName,
-        wins: 0,
-        losses: 0,
-        totalWinnings: 0,
-        currentBet: 0,
-        actionPattern: {
-          preFlopFoldRate: 0,
-          preFlopRaiseRate: 0,
-          aggressionFactor: 0,
-          totalActions: 0
-        },
-        actionHistory: []
-      });
-    }
-    
-    return this.gameHistory.opponentProfiles.get(playerId)!;
-  }
-  
-  // Track all player actions in the current round
-  private trackPlayerActions(gameState: any, roundData: RoundData): void {
-    if (!gameState.betting_phase) return;
-    
-    const currentPhase = gameState.betting_phase;
-    
-    console.log(`[Game ${gameState.game_id}] Betting phase: ${currentPhase}`);
-    
-    // Check player actions based on bet changes and previous rounds
-    for (const player of gameState.players) {
-      if (player.status !== 'active') continue;
-      
-      const playerId = player.id || player.name;
-      const playerProfile = this.getOrCreatePlayerProfile(playerId, player.name);
-      
-      // Try to determine action (very basic - would need more data from the server)
-      let actionType = 'unknown';
-      const isDealer = gameState.dealer === player.id;
-      const isSmallBlind = (gameState.dealer + 1) % gameState.players.length === player.id;
-      const isBigBlind = (gameState.dealer + 2) % gameState.players.length === player.id;
-      
-      if (isSmallBlind && player.bet === gameState.small_blind) {
-        actionType = 'small_blind';
-      } else if (isBigBlind && player.bet === gameState.small_blind * 2) {
-        actionType = 'big_blind';
-      } else if (player.bet === 0) {
-        actionType = 'fold';
-      } else if (player.bet === gameState.current_buy_in) {
-        actionType = 'call';
-      } else if (player.bet > gameState.current_buy_in) {
-        actionType = 'raise';
-      }
-      
-      // Add action to round data
-      if (actionType !== 'unknown') {
-        const action = {
-          playerId,
-          playerName: player.name,
-          action: actionType,
-          amount: player.bet,
-          round: roundData.roundName
-        };
-        
-        // Add to player's history
-        playerProfile.actionHistory.push(action);
-        
-        // Add to round data
-        roundData.playerActions.push(action);
-        
-        // Update action patterns
-        this.updatePlayerActionPattern(playerProfile, action);
-        
-        console.log(`[Game ${gameState.game_id}] Player ${player.name} action: ${actionType} (${player.bet})`);
-      }
-    }
-  }
-  
-  // Update player action patterns for analysis
-  private updatePlayerActionPattern(profile: OpponentProfile, action: PlayerAction): void {
-    // Increment total actions
-    profile.actionPattern.totalActions++;
-    
-    // Update pre-flop statistics
-    if (action.round === 'pre-flop') {
-      if (action.action === 'fold') {
-        profile.actionPattern.preFlopFoldRate = 
-          (profile.actionPattern.preFlopFoldRate * (profile.actionPattern.totalActions - 1) + 1) / 
-          profile.actionPattern.totalActions;
-      }
-      
-      if (action.action === 'raise') {
-        profile.actionPattern.preFlopRaiseRate = 
-          (profile.actionPattern.preFlopRaiseRate * (profile.actionPattern.totalActions - 1) + 1) / 
-          profile.actionPattern.totalActions;
-      }
-    }
-    
-    // Update aggression factor (raises and bets vs calls and checks)
-    const aggressiveActions = profile.actionHistory.filter(a => 
-      a.action === 'raise' || a.action === 'bet'
-    ).length;
-    
-    const passiveActions = profile.actionHistory.filter(a => 
-      a.action === 'call' || a.action === 'check'
-    ).length;
-    
-    profile.actionPattern.aggressionFactor = passiveActions > 0 ? 
-      aggressiveActions / passiveActions : 
-      aggressiveActions;
-  }
-  
-  // Log round data
-  private logRoundData(roundData: RoundData): void {
-    this.gameHistory.roundHistory.push(roundData);
-    
-    // Log the full round data - in a real situation, you might want to send this to a database or file
-    console.log(`[Game ${roundData.gameId}] Round ${roundData.roundId} (${roundData.roundName}) complete`);
-    console.log(`[Game ${roundData.gameId}] Round data: ${JSON.stringify({
-      roundId: roundData.roundId,
-      roundName: roundData.roundName,
-      potSize: roundData.potSize,
-      communityCards: this.formatCards(roundData.communityCards),
-      actions: roundData.playerActions.length,
-      decision: roundData.ourDecision
-    })}`);
   }
   
   // Get reasoning string for our decision
@@ -450,26 +188,6 @@ export class Player {
     if (this.hasStraightDraw(allCards)) return 'Straight draw';
     
     return 'High card';
-  }
-  
-  // Log overall game stats
-  private logGameStats(gameState: any): void {
-    console.log(`==============================================`);
-    console.log(`[Game ${gameState.game_id}] Game stats`);
-    
-    // Log opponent profiles
-    console.log('Opponent profiles:');
-    for (const [id, profile] of this.gameHistory.opponentProfiles.entries()) {
-      console.log(`Player: ${profile.name}
-  Wins: ${profile.wins}
-  Losses: ${profile.losses}
-  Total winnings: ${profile.totalWinnings}
-  Pre-flop fold rate: ${(profile.actionPattern.preFlopFoldRate * 100).toFixed(2)}%
-  Pre-flop raise rate: ${(profile.actionPattern.preFlopRaiseRate * 100).toFixed(2)}%
-  Aggression factor: ${profile.actionPattern.aggressionFactor.toFixed(2)}`);
-    }
-    
-    console.log(`==============================================`);
   }
   
   // Determine the current round of poker
@@ -649,47 +367,6 @@ export class Player {
     // Fold with weak hands or if the cost to call is too high
     return 0;
   }
-};
-
-// Type definitions for our logging system
-interface PlayerAction {
-  playerId: string;
-  playerName: string;
-  action: string;
-  amount: number;
-  round: string;
-}
-
-interface RoundData {
-  roundId: number;
-  gameId: string;
-  timestamp: string;
-  roundName: string;
-  potSize: number;
-  communityCards: any[];
-  playerActions: PlayerAction[];
-  ourDecision: {
-    handStrength: number;
-    position: string;
-    betAmount: number;
-    reasoning: string;
-  }
-}
-
-interface OpponentProfile {
-  id: string;
-  name: string;
-  wins: number;
-  losses: number;
-  totalWinnings: number;
-  currentBet: number;
-  actionPattern: {
-    preFlopFoldRate: number;
-    preFlopRaiseRate: number;
-    aggressionFactor: number;
-    totalActions: number;
-  };
-  actionHistory: PlayerAction[];
 }
 
 export default Player;
