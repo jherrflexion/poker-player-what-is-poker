@@ -13,6 +13,12 @@ export class Player {
       // Find our player
       const ourPlayer = gameState.players[gameState.in_action];
       
+      // TEMPORARY CHANGE: Always go all-in
+      console.log(`[Game ${gameState.game_id}] GOING ALL-IN (temporary strategy)`);
+      betCallback(ourPlayer.stack);
+      return;
+      
+      /* Original betting logic - commented out temporarily
       // Log active players and their stacks
       this.logActivePlayers(gameState);
       
@@ -84,6 +90,7 @@ export class Player {
       console.log(`[Game ${gameState.game_id}] Betting ${betAmount} with hand strength ${handStrength} (${decisionReasoning})`);
       
       betCallback(betAmount);
+      */
     } catch (e) {
       console.error('Error in betRequest:', e);
       betCallback(0); // Fold if there's an error
