@@ -143,21 +143,25 @@ export class Player {
   }
 
   public showdown(gameState: any): void {
-    console.log('Showdown game state', JSON.stringify(gameState))
-    return
     try {
-      console.log(`[Game ${gameState.game_id}] Showdown reached: `);
+      console.log('Showdown game state', JSON.stringify(gameState));
       
-      // Find our player
-      const ourPlayerId = gameState.players.find((p: any) => 
-        p.name === Player.VERSION || p.id === gameState.in_action
-      )?.id;
+      console.log(`[Game ${gameState.game_id}] Showdown reached`);
+      
+      // Find our player (What Is Poker)
+      const ourPlayer = gameState.players.find((p: any) => p.name === "What Is Poker" || p.version === Player.VERSION);
+      const ourPlayerId = ourPlayer?.id;
+      
+      if (!ourPlayer) {
+        console.log('[Showdown] Could not find our player in the game state');
+        return;
+      }
       
       // Create showdown data object
       const showdownData = {
         gameId: gameState.game_id,
         timestamp: new Date().toISOString(),
-        pot: gameState.pot,
+        pot: gameState.pot || 0,
         winners: [] as any[],
         allHands: [] as any[],
         ourResult: {
@@ -172,28 +176,36 @@ export class Player {
       
       // Track each player's hand and result
       for (const player of gameState.players) {
-        if (player.status !== 'active' || !player.hole_cards) continue;
+        // Skip players without hole cards
+        if (!player.hole_cards) {
+          console.log(`[Showdown] Player ${player.name} has no hole cards`);
+          continue;
+        }
         
-        const playerId = player.id || player.name;
+        const playerId = player.id;
         const isUs = playerId === ourPlayerId;
-        const playerProfile = this.getOrCreatePlayerProfile(playerId, player.name);
+        const playerProfile = this.getOrCreatePlayerProfile(String(playerId), player.name);
         
         // Format player's hand
         const handString = this.formatCards(player.hole_cards);
         
-        // Get a hand rank if available in the game state (depends on the poker server implementation)
+        // Get a hand rank if available or calculate it
         const handRank = player.hand_rank || this.describeHand(player.hole_cards, gameState.community_cards || []);
         
-        // Track if they won
-        const isWinner = gameState.winners && gameState.winners.some((w: any) => w.id === playerId || w.name === player.name);
-        const amountWon = isWinner ? (gameState.pot / gameState.winners.length) : 0;
+        // Track winners based on amount_won property
+        const isWinner = player.amount_won && player.amount_won > 0;
+        const amountWon = player.amount_won || 0;
         
         // Update player profile
         if (isWinner) {
           playerProfile.wins++;
           playerProfile.totalWinnings += amountWon;
+          console.log(`[Showdown] Player ${player.name} won ${amountWon}`);
         } else {
-          playerProfile.losses++;
+          // Only count losses for active players or those who folded with cards
+          if (player.status === 'active' || player.status === 'folded') {
+            playerProfile.losses++;
+          }
         }
         
         // Log hand and result
@@ -206,7 +218,8 @@ export class Player {
           hand: [...player.hole_cards],
           handRank,
           isWinner,
-          amountWon
+          amountWon,
+          status: player.status
         };
         
         if (isWinner) {
