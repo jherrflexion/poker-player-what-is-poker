@@ -226,7 +226,7 @@ export class Player {
       this.logGameStats(gameState);
       
       // Save showdown data
-      console.log(`[Game ${gameState.game_id}] Showdown data: ${JSON.stringify(showdownData, null, 2)}`);
+      console.log(`[Game ${gameState.game_id}] Showdown data: ${JSON.stringify(showdownData)}`);
     } catch (e) {
       console.error('Error in showdown:', e);
     }
