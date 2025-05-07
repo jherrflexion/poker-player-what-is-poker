@@ -13,8 +13,21 @@ export class PokerBot {
     }
   }
 
+  // noinspection JSUnusedLocalSymbols
   public showdown(gameState: GameState): void {
     // No changes made to this method
+  }
+
+  public static betAmounts(gameState: GameState, handStrength: number ):any{
+    const betRatio = handStrength * PokerBot.positionFactor(gameState) * PokerBot.roundFactor(gameState);
+    const potBet = Math.round(gameState.pot * betRatio);
+
+    return {
+      fold: 0,
+      call: gameState.toCall(),
+      smallRaise: gameState.toCall() + Math.max(gameState.minimumRaise, potBet),
+      bigRaise: gameState.toCall() + gameState.minimumRaise * 2
+    }
   }
 
   private makeBetDecision(gameState: GameState): number {
@@ -22,27 +35,17 @@ export class PokerBot {
       gameState.ourPlayer().holeCards,
       gameState.communityCards
     );
-
-    if (handStrength < 0.15) {
-      return 0; // Fold with weak hands
-    }
+    const betAmounts = PokerBot.betAmounts(gameState, handStrength);
 
     if (handStrength > 0.5) {
-      return gameState.toCall() + gameState.minimumRaise * 2;
+      return betAmounts.bigRaise;
+    } else if (handStrength > 0.3) {
+      return betAmounts.smallRaise;
+    } else if (handStrength > 0.2 && gameState.toCall() <= gameState.smallBlind * 4) {
+      return betAmounts.call;
+    } else {
+      return betAmounts.fold;
     }
-
-    const betRatio = handStrength * PokerBot.positionFactor(gameState) * PokerBot.roundFactor(gameState);
-    const potBet = Math.round(gameState.pot * betRatio);
-
-    if (handStrength > 0.3) {
-      return gameState.toCall() + Math.max(gameState.minimumRaise, potBet);
-    }
-
-    if (handStrength > 0.2 && gameState.toCall() <= gameState.smallBlind * 4) {
-      return gameState.toCall();
-    }
-
-    return 0; // Fold with weak hands or high cost
   }
 
   private static roundFactor(gameState: GameState): number {
