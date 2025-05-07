@@ -50,5 +50,37 @@ export class GameState {
 
   ourPlayer(): Player {
         return this.players[this.inAction];
-    }
+  }
+
+  toCall(): number {
+    return this.currentBuyIn - this.ourPlayer().bet;
+  }
+
+  activePlayers(): Player[] {
+    return this.players.filter(player => player.status === 'active');
+  }
+
+  pokerRound(): string {
+    const communityCardCount = this.communityCards.length;
+    if (communityCardCount === 0) return 'pre-flop';
+    if (communityCardCount === 3) return 'flop';
+    if (communityCardCount === 4) return 'turn';
+    if (communityCardCount === 5) return 'river';
+    return 'unknown';
+  }
+
+  position(): string {
+    const dealerPosition = this.dealer;
+    const ourPosition = this.inAction;
+    const playerCount = this.activePlayers().length;
+
+    const positionFromDealer = (ourPosition - dealerPosition - 1 + playerCount) % playerCount;
+
+    const earlyPositionThreshold = Math.floor(playerCount / 3);
+    const middlePositionThreshold = Math.floor(2 * playerCount / 3);
+
+    if (positionFromDealer < earlyPositionThreshold) return 'early';
+    if (positionFromDealer < middlePositionThreshold) return 'middle';
+    return 'late';
+  }
 }

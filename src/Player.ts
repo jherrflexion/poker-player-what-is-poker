@@ -28,4 +28,8 @@ export class Player {
         this.bet = props.bet;
         this.holeCards = props.hole_cards || [];
     }
+
+    canAffordBet(amount: number): boolean {
+        return this.stack >= amount;
+    }
 }
