@@ -1,19 +1,34 @@
 import { GameState } from './GameState';
 import { HandEvaluator } from './HandEvaluator';
 import { PlayerTracker } from './PlayerTracker';
+import { TournamentDataService } from './TournamentDataService';
 
 export class PokerBot {
-  public static readonly VERSION = "Aggressive Heads-Up v1.2";
+  public static readonly VERSION = "Dynamic Tournament Strategy v1.3";
   private playerTracker: PlayerTracker = PlayerTracker.getInstance();
+  private tournamentDataService: TournamentDataService = TournamentDataService.getInstance();
 
   public betRequest(gameState: GameState, betCallback: (bet: number) => void): void {
     try {
       // Process the game state to track player actions
       this.playerTracker.processGameState(gameState);
-
-      this.playerTracker.logPlayerStats();
       
-      betCallback(this.makeBetDecision(gameState));
+      // Fetch tournament data asynchronously
+      this.tournamentDataService.fetchTournamentData()
+        .then(() => {
+          this.playerTracker.logPlayerStats();
+          betCallback(this.makeBetDecision(gameState));
+        })
+        .catch(error => {
+          console.error("Error in tournament data fetch:", error);
+          betCallback(this.makeBetDecision(gameState));
+        });
+      
+      // If the fetch takes too long, we'll make a decision without updated data
+      setTimeout(() => {
+        betCallback(this.makeBetDecision(gameState));
+      }, 800); // 800ms timeout to ensure we respond
+      
     } catch (e) {
       console.error('Error in betRequest:', e);
       betCallback(0); // Fold if there's an error
@@ -71,6 +86,24 @@ export class PokerBot {
     
     console.log(`Hand strength: ${handStrength.toFixed(2)}, Average opponent aggressiveness: ${avgOpponentAggression.toFixed(2)}`);
     console.log(`Active opponents: ${opponents.length}, Heads-up: ${isHeadsUp}`);
+    
+    // Check if we're in heads-up against the lowest scoring player
+    const isLowestScoringOpponent = isHeadsUp && opponents[0] && 
+                                   this.tournamentDataService.isLowestScoreTeam(opponents[0].name);
+    
+    if (isLowestScoringOpponent) {
+      const opponentName = opponents[0].name;
+      console.log(`Strategy: Let ${opponentName} win in heads-up (lowest scoring team)`);
+      
+      // Play very passively against the lowest scoring team
+      if (handStrength > 0.85) {
+        // Only play very strong hands, and even then just call
+        return gameState.toCall();
+      } else {
+        // Fold everything else
+        return 0;
+      }
+    }
     
     const betAmounts = PokerBot.betAmounts(gameState, handStrength, avgOpponentAggression, isHeadsUp);
 
