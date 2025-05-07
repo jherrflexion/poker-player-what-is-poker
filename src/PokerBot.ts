@@ -21,18 +21,6 @@ export class PokerBot {
     // No changes made to this method
   }
 
-
-  // Get UTF-8 symbol for card suit
-  private getSuitSymbol(suit: string): string {
-    switch (suit.toLowerCase()) {
-      case 'hearts': return '♥';
-      case 'diamonds': return '♦';
-      case 'clubs': return '♣';
-      case 'spades': return '♠';
-      default: return suit.charAt(0).toUpperCase();
-    }
-  }
-
   // Evaluate hand strength on a scale of 0-1
   private evaluateHandStrength(holeCards: any[], communityCards: any[]): number {
     // Pre-flop hand evaluation
@@ -136,40 +124,36 @@ export class PokerBot {
 
   // Make betting decision based on various factors
   private makeBetDecision(gameState: GameState): number {
-    const ourPlayer = gameState.ourPlayer();
-    const handStrength = this.evaluateHandStrength(ourPlayer.holeCards, gameState.communityCards);
-    const position = gameState.position();
-    const pokerRound = gameState.pokerRound();
-    const toCall = gameState.toCall();
-    const minimumRaise = gameState.minimumRaise;
-    const pot = gameState.pot;
-    const smallBlind = gameState.smallBlind;
+    let handStrength = this.evaluateHandStrength(gameState.ourPlayer().holeCards, gameState.communityCards);
 
     if (handStrength < 0.15) {
       return 0; // Fold with weak hands
     }
 
     if (handStrength > 0.5) {
-      const raiseAmount = toCall + minimumRaise * 2;
-      return ourPlayer.canAffordBet(raiseAmount) ? raiseAmount : ourPlayer.stack;
+      return gameState.toCall() + gameState.minimumRaise * 2;
     }
 
-    const positionFactor = position === 'late' ? 1.2 : position === 'middle' ? 1.0 : 0.8;
-    const roundFactor = pokerRound === 'pre-flop' ? 0.8 : pokerRound === 'flop' ? 1.0 : pokerRound === 'turn' ? 1.2 : 1.5;
-
-    const betRatio = handStrength * positionFactor * roundFactor;
-    const potBet = Math.round(pot * betRatio);
+    const betRatio = handStrength * PokerBot.positionFactor(gameState) * PokerBot.roundFactor(gameState);
+    const potBet = Math.round(gameState.pot * betRatio);
 
     if (handStrength > 0.3) {
-      const raise = toCall + Math.max(minimumRaise, potBet);
-      return ourPlayer.canAffordBet(raise) ? raise : ourPlayer.stack;
+      return gameState.toCall() + Math.max(gameState.minimumRaise, potBet);
     }
 
-    if (handStrength > 0.2 && toCall <= smallBlind * 4) {
-      return toCall;
+    if (handStrength > 0.2 && gameState.toCall() <= gameState.smallBlind * 4) {
+      return gameState.toCall();
     }
 
     return 0; // Fold with weak hands or high cost
+  }
+
+  private static roundFactor(gameState: GameState) {
+    return gameState.pokerRound() === 'pre-flop' ? 0.8 : gameState.pokerRound() === 'flop' ? 1.0 : gameState.pokerRound() === 'turn' ? 1.2 : 1.5;
+  }
+
+  private static positionFactor(gameState: GameState) {
+    return gameState.position() === 'late' ? 1.2 : gameState.position() === 'middle' ? 1.0 : 0.8;
   }
 }
 
