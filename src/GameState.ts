@@ -29,7 +29,7 @@ export class GameState {
   dealer: number;
   orbits: number;
   inAction: number;
-  players: PlayerProps[];
+  players: Player[];
   communityCards: CardProps[];
 
   constructor(props: GameStateProps) {
