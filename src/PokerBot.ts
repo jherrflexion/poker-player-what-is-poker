@@ -3,7 +3,7 @@ import { HandEvaluator } from './HandEvaluator';
 import { PlayerTracker } from './PlayerTracker';
 
 export class PokerBot {
-  public static readonly VERSION = "Opponent Tracker v1.0";
+  public static readonly VERSION = "Multi-Opponent Strategy v1.1";
   private playerTracker: PlayerTracker = PlayerTracker.getInstance();
 
   public betRequest(gameState: GameState, betCallback: (bet: number) => void): void {
@@ -26,19 +26,20 @@ export class PokerBot {
     this.playerTracker.logPlayerStats();
   }
 
-  public static betAmounts(gameState: GameState, handStrength: number, opponentAggression: number): any {
+  public static betAmounts(gameState: GameState, handStrength: number, opponentAggression: number, isHeadsUp: boolean): any {
     // Adjust bet sizing based on hand strength, position, round, and opponent aggression
-    const betRatio = handStrength * PokerBot.positionFactor(gameState) * PokerBot.roundFactor(gameState);
+    let betRatio = handStrength * PokerBot.positionFactor(gameState) * PokerBot.roundFactor(gameState);
     
-    // Against aggressive opponents, we can bluff more with weaker hands
-    // and value bet more with stronger hands
-    const adjustedBetRatio = opponentAggression > 0.7 
-      ? (handStrength < 0.3 ? betRatio * 1.3 : betRatio * 1.2) // More bluffs against aggressive players
-      : (opponentAggression < 0.3 
-          ? (handStrength > 0.7 ? betRatio * 1.3 : betRatio * 0.8) // Value bet more, bluff less against passive players
-          : betRatio); // Neutral adjustment for neutral players
+    // Adjust bet sizing based on whether we're heads-up and opponent aggression
+    if (isHeadsUp && opponentAggression > 0.7) {
+      // In heads-up against aggressive player, lower our bets to induce raises
+      betRatio = betRatio * 0.8;
+    } else if (!isHeadsUp && opponentAggression > 0.7) {
+      // Multiple aggressive opponents - be more selective with bet sizing
+      betRatio = handStrength > 0.6 ? betRatio * 1.2 : betRatio * 0.7;
+    }
     
-    const potBet = Math.round(gameState.pot * adjustedBetRatio);
+    const potBet = Math.round(gameState.pot * betRatio);
 
     return {
       fold: 0,
@@ -54,8 +55,9 @@ export class PokerBot {
       gameState.communityCards
     );
     
-    // Calculate average aggressiveness of active opponents
+    // Calculate opponent information
     const opponents = gameState.activePlayers().filter(p => p.id !== gameState.ourPlayer().id);
+    const isHeadsUp = opponents.length === 1;
     let avgOpponentAggression = 0.5; // Default value
     
     if (opponents.length > 0) {
@@ -66,36 +68,47 @@ export class PokerBot {
     }
     
     console.log(`Hand strength: ${handStrength.toFixed(2)}, Average opponent aggressiveness: ${avgOpponentAggression.toFixed(2)}`);
+    console.log(`Active opponents: ${opponents.length}, Heads-up: ${isHeadsUp}`);
     
-    const betAmounts = PokerBot.betAmounts(gameState, handStrength, avgOpponentAggression);
+    const betAmounts = PokerBot.betAmounts(gameState, handStrength, avgOpponentAggression, isHeadsUp);
 
-    // Adjust decision thresholds based on opponent aggressiveness
-    if (avgOpponentAggression > 0.7) {
-      // Against aggressive opponents
+    // Multiple aggressive opponents - play conservatively and wait for strong hands
+    if (!isHeadsUp && avgOpponentAggression > 0.7) {
+      console.log("Strategy: Conservative against multiple aggressive opponents");
+      
+      if (handStrength > 0.7) {
+        return betAmounts.bigRaise; // Value bet very strong hands
+      } else if (handStrength > 0.5) {
+        return betAmounts.smallRaise; // Value bet strong hands
+      } else if (handStrength > 0.35 && gameState.toCall() <= gameState.smallBlind * 4) {
+        return betAmounts.call; // Call with medium hands if cheap
+      } else {
+        return betAmounts.fold; // Otherwise fold
+      }
+    } 
+    // Heads-up against aggressive opponent - exploit their aggression
+    else if (isHeadsUp && avgOpponentAggression > 0.7) {
+      console.log("Strategy: Exploiting single aggressive opponent");
+      
       if (handStrength > 0.6) {
-        return betAmounts.bigRaise; // Value bet strong hands
+        // With strong hands, slowplay to induce bluffs
+        return Math.random() < 0.7 ? betAmounts.call : betAmounts.smallRaise;
       } else if (handStrength > 0.4) {
+        return betAmounts.call; // Call more with medium strength hands
+      } else if (handStrength > 0.25 && gameState.pokerRound() !== 'pre-flop') {
+        // Call with more marginal hands postflop
+        return gameState.toCall() <= gameState.smallBlind * 6 ? betAmounts.call : betAmounts.fold;
+      } else if (handStrength < 0.15 && Math.random() < 0.1 && gameState.pokerRound() === 'river') {
+        // Occasionally bluff-raise on the river
         return betAmounts.smallRaise;
-      } else if (handStrength > 0.15 && gameState.toCall() <= gameState.smallBlind * 5) {
-        return betAmounts.call; // Call with slightly weaker hands
-      } else if (handStrength < 0.15 && Math.random() < 0.2 && gameState.pokerRound() !== 'pre-flop') {
-        return betAmounts.smallRaise; // Occasionally bluff with weak hands
       } else {
         return betAmounts.fold;
       }
-    } else if (avgOpponentAggression < 0.3) {
-      // Against passive opponents
-      if (handStrength > 0.45) {
-        return betAmounts.bigRaise; // Be more aggressive with good hands
-      } else if (handStrength > 0.25) {
-        return betAmounts.smallRaise; // Raise more frequently
-      } else if (handStrength > 0.15 && gameState.toCall() <= gameState.smallBlind * 3) {
-        return betAmounts.call;
-      } else {
-        return betAmounts.fold;
-      }
-    } else {
-      // Against neutral opponents, use the default strategy
+    }
+    // Non-aggressive or mixed opponents - use default strategy with slight adjustments
+    else {
+      console.log("Strategy: Default with adjustments");
+      
       if (handStrength > 0.5) {
         return betAmounts.bigRaise;
       } else if (handStrength > 0.3) {
