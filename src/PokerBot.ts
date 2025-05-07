@@ -33,7 +33,7 @@ export class PokerBot {
     // Adjust bet sizing based on whether we're heads-up and opponent aggression
     if (isHeadsUp && opponentAggression > 0.7) {
       // In heads-up against aggressive player, lower our bets to induce raises
-      betRatio = betRatio * 0.8;
+      betRatio = betRatio * 0.9;
     } else if (!isHeadsUp && opponentAggression > 0.7) {
       // Multiple aggressive opponents - be more selective with bet sizing
       betRatio = handStrength > 0.6 ? betRatio * 1.2 : betRatio * 0.7;
