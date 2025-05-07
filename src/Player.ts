@@ -17,7 +17,7 @@ export class Player {
     version: string; // Version identifier returned by the player
     stack: number; // Chips available for the player
     bet: number; // Chips the player put into the pot
-    hole_cards?: CardProps[];
+    holeCards: CardProps[];
 
     constructor(props: PlayerProps) {
         this.id = props.id;
@@ -26,6 +26,6 @@ export class Player {
         this.version = props.version;
         this.stack = props.stack;
         this.bet = props.bet;
-        this.hole_cards = props.hole_cards || [];
+        this.holeCards = props.hole_cards || [];
     }
 }

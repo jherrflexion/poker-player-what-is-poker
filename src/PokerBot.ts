@@ -1,4 +1,4 @@
-import { GameState } from './GameState';
+import {GameState} from './GameState';
 
 export class PokerBot {
   // Card ranks and suits for evaluating hands
@@ -10,57 +10,26 @@ export class PokerBot {
 
   public betRequest(gameState: GameState, betCallback: (bet: number) => void): void {
     try {
-      
-      // Find our player
-      const ourPlayer = gameState.players[gameState.inAction];
+      const ourPlayer = gameState.ourPlayer();
+      const pokerRound = this.calculatePokerRound(gameState.communityCards.length);
+      const toCall = gameState.currentBuyIn - ourPlayer.bet;
 
-      // Get our hole cards
-      const holeCards = ourPlayer.hole_cards || [];
-      
-      // Get community cards
-      const communityCards = gameState.communityCards || [];
-      
-      // Calculate current round
-      const pokerRound = this.calculatePokerRound(communityCards.length);
+      const handStrength = this.evaluateHandStrength(ourPlayer.holeCards, gameState.communityCards);
 
-      
-      // Betting amounts
-      const currentBuyIn = gameState.currentBuyIn;
-      const minimumRaise = gameState.minimumRaise;
-      const ourCurrentBet = ourPlayer.bet;
-      const toCall = currentBuyIn - ourCurrentBet;
-      const smallBlind = gameState.smallBlind;
-
-      // Our stack 
-      const ourStack = ourPlayer.stack;
-      
-      // Hand strength evaluation
-      const handStrength = this.evaluateHandStrength(holeCards, communityCards);
-      
-      // Position evaluation (being in late position is better)
       const playerCount = gameState.players.filter((p: any) => p.status === 'active').length;
       const position = this.calculatePosition(gameState.dealer, gameState.inAction, playerCount);
-      
-      // Decision making based on different factors
+
       const betAmount = this.makeBetDecision(
         handStrength,
         position,
         pokerRound,
         toCall,
-        minimumRaise,
-        ourStack,
-        smallBlind,
+        gameState.minimumRaise,
+        ourPlayer.stack,
+        gameState.smallBlind,
         gameState.pot
       );
-      
-      // Log our decision with detailed reasoning
-      let decisionReasoning = this.getDecisionReasoning(
-        handStrength, 
-        position, 
-        pokerRound, 
-        betAmount, 
-        toCall
-      );
+
       
       betCallback(betAmount);
     } catch (e) {

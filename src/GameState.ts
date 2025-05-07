@@ -47,4 +47,8 @@ export class GameState {
     this.players = props.players.map(player => new Player(player));
     this.communityCards = props.community_cards;
   }
+
+  ourPlayer(): Player {
+        return this.players[this.inAction];
+    }
 }
