@@ -1,11 +1,11 @@
 import express from 'express';
-import { Player } from './Player';
+import { PokerBot } from './PokerBot';
+import { GameState } from './GameState';
 
-const VERSION = Player.VERSION;
+const VERSION = PokerBot.VERSION;
 
 const app = express();
-const player = new Player();
-
+const player = new PokerBot();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -14,10 +14,22 @@ app.get('/', ({}, res) => res.status(200).send('OK'));
 
 app.post('/', (req, res) => {
     if (req.body.action === 'bet_request') {
-        player.betRequest(JSON.parse(req.body.game_state), bet => res.status(200).send(bet.toString()));
+        try {
+            const gameState = new GameState(JSON.parse(req.body.game_state));
+            player.betRequest(gameState, bet => res.status(200).send(bet.toString()));
+        } catch (e) {
+            console.error('Error parsing game state:', e);
+            res.status(500).send('Error');
+        }
     } else if (req.body.action === 'showdown') {
-        player.showdown(JSON.parse(req.body.game_state));
-        res.status(200).send('OK');
+        try {
+            const gameState = new GameState(JSON.parse(req.body.game_state));
+            player.showdown(gameState);
+            res.status(200).send('OK');
+        } catch (e) {
+            console.error('Error parsing game state:', e);
+            res.status(500).send('Error');
+        }
     } else if (req.body.action === 'version') {
         res.status(200).send(VERSION);
     } else {
