@@ -8,38 +8,19 @@ export class Player {
 
   public betRequest(gameState: any, betCallback: (bet: number) => void): void {
     try {
-      console.log(`[Game ${gameState.game_id}] Starting bet request`);
       
       // Find our player
       const ourPlayer = gameState.players[gameState.in_action];
 
-
-      // Log active players and their stacks
-      this.logActivePlayers(gameState);
-      
       // Get our hole cards
       const holeCards = ourPlayer.hole_cards || [];
-      if (!holeCards.length) {
-        console.log(`[Game ${gameState.game_id}] No hole cards found, folding`);
-        betCallback(0);
-        return;
-      }
-      
-      // Log our hole cards
-      console.log(`[Game ${gameState.game_id}] Our hole cards: ${this.formatCards(holeCards)}`);
       
       // Get community cards
       const communityCards = gameState.community_cards || [];
       
       // Calculate current round
       const pokerRound = this.calculatePokerRound(communityCards.length);
-      
-      // Log community cards and round
-      if (communityCards.length > 0) {
-        console.log(`[Game ${gameState.game_id}] Community cards (${pokerRound}): ${this.formatCards(communityCards)}`);
-      } else {
-        console.log(`[Game ${gameState.game_id}] Pre-flop round`);
-      }
+
       
       // Betting amounts
       const currentBuyIn = gameState.current_buy_in;
@@ -47,10 +28,7 @@ export class Player {
       const ourCurrentBet = ourPlayer.bet;
       const toCall = currentBuyIn - ourCurrentBet;
       const smallBlind = gameState.small_blind;
-      
-      // Log betting state
-      console.log(`[Game ${gameState.game_id}] Current buy-in: ${currentBuyIn}, Minimum raise: ${minimumRaise}, Our current bet: ${ourCurrentBet}, To call: ${toCall}`);
-      
+
       // Our stack 
       const ourStack = ourPlayer.stack;
       
@@ -82,8 +60,6 @@ export class Player {
         toCall
       );
       
-      console.log(`[Game ${gameState.game_id}] Betting ${betAmount} with hand strength ${handStrength} (${decisionReasoning})`);
-      
       betCallback(betAmount);
     } catch (e) {
       console.error('Error in betRequest:', e);
@@ -92,48 +68,7 @@ export class Player {
   }
 
   public showdown(gameState: any): void {
-    try {
-      console.log(`[Game ${gameState.game_id}] Showdown reached`);
-      
-      // Find our player (What Is Poker)
-      const ourPlayer = gameState.players.find((p: any) => p.name === "What Is Poker" || p.version === Player.VERSION);
-      
-      if (!ourPlayer) {
-        console.log('[Showdown] Could not find our player in the game state');
-        return;
-      }
-      
-      // Log player hands
-      console.log('[Showdown] Player hands:');
-      
-      // Track each player's hand and result
-      for (const player of gameState.players) {
-        // Skip players without hole cards
-        if (!player.hole_cards) {
-          console.log(`[Showdown] Player ${player.name} has no hole cards`);
-          continue;
-        }
-        
-        const isUs = player.id === ourPlayer.id;
-        
-        // Format player's hand
-        const handString = this.formatCards(player.hole_cards);
-        
-        // Get a hand rank if available or calculate it
-        const handRank = player.hand_rank || this.describeHand(player.hole_cards, gameState.community_cards || []);
-        
-        // Track winners based on amount_won property
-        const isWinner = player.amount_won && player.amount_won > 0;
-        const amountWon = player.amount_won || 0;
-        
-        // Log hand and result
-        console.log(`[Showdown] ${isUs ? 'OUR HAND' : player.name}: ${handString} - ${handRank} ${isWinner ? `(WON: ${amountWon})` : ''}`);
-      }
-      
-      console.log(`[Game ${gameState.game_id}] Showdown complete`);
-    } catch (e) {
-      console.error('Error in showdown:', e);
-    }
+
   }
   
   // Format cards for nice logging
@@ -151,18 +86,13 @@ export class Player {
       default: return suit.charAt(0).toUpperCase();
     }
   }
-  
-  // Log active players in current round
-  private logActivePlayers(gameState: any): void {
-    const activePlayers = gameState.players.filter((p: any) => p.status === 'active');
-    
-    console.log(`[Game ${gameState.game_id}] Active players: ${activePlayers.length}`);
-    for (const player of activePlayers) {
-      console.log(`[Game ${gameState.game_id}] Player: ${player.name}, Stack: ${player.stack}, Bet: ${player.bet}`);
-    }
+
+
+  private static activePlayers(gameState: any) {
+    return gameState.players.filter((p: any) => p.status === 'active');
   }
-  
-  // Get reasoning string for our decision
+
+// Get reasoning string for our decision
   private getDecisionReasoning(
     handStrength: number,
     position: string,
