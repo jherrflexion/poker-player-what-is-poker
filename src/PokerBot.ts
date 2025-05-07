@@ -3,7 +3,7 @@ import { HandEvaluator } from './HandEvaluator';
 import { PlayerTracker } from './PlayerTracker';
 
 export class PokerBot {
-  public static readonly VERSION = "Multi-Opponent Strategy v1.1";
+  public static readonly VERSION = "Aggressive Heads-Up v1.2";
   private playerTracker: PlayerTracker = PlayerTracker.getInstance();
 
   public betRequest(gameState: GameState, betCallback: (bet: number) => void): void {
@@ -32,8 +32,8 @@ export class PokerBot {
     
     // Adjust bet sizing based on whether we're heads-up and opponent aggression
     if (isHeadsUp && opponentAggression > 0.7) {
-      // In heads-up against aggressive player, lower our bets to induce raises
-      betRatio = betRatio * 0.9;
+      // In heads-up against aggressive player, use more aggressive sizing
+      betRatio = betRatio * 1.2;
     } else if (!isHeadsUp && opponentAggression > 0.7) {
       // Multiple aggressive opponents - be more selective with bet sizing
       betRatio = handStrength > 0.6 ? betRatio * 1.2 : betRatio * 0.7;
@@ -45,7 +45,9 @@ export class PokerBot {
       fold: 0,
       call: gameState.toCall(),
       smallRaise: gameState.toCall() + Math.max(gameState.minimumRaise, potBet),
-      bigRaise: gameState.toCall() + gameState.minimumRaise * 2
+      bigRaise: gameState.toCall() + gameState.minimumRaise * 2,
+      // Add a larger raise option for heads-up aggressive play
+      hugeRaise: gameState.toCall() + gameState.minimumRaise * 3
     }
   }
 
@@ -86,21 +88,50 @@ export class PokerBot {
         return betAmounts.fold; // Otherwise fold
       }
     } 
-    // Heads-up against aggressive opponent - exploit their aggression
+    // Heads-up against aggressive opponent - be more aggressive to counter
     else if (isHeadsUp && avgOpponentAggression > 0.7) {
-      console.log("Strategy: Exploiting single aggressive opponent");
+      console.log("Strategy: AGGRESSIVE heads-up play");
+      
+      // Use stack size to adjust strategy
+      const stackRatio = gameState.ourPlayer().stack / 
+                         (opponents[0].stack + gameState.pot);
+      const isShortStacked = stackRatio < 0.5;
       
       if (handStrength > 0.6) {
-        // With strong hands, slowplay to induce bluffs
-        return Math.random() < 0.7 ? betAmounts.call : betAmounts.smallRaise;
+        // With strong hands, be very aggressive
+        const raiseRandom = Math.random();
+        if (raiseRandom < 0.6) {
+          return betAmounts.bigRaise;
+        } else if (raiseRandom < 0.8) {
+          return betAmounts.hugeRaise;
+        } else {
+          // Occasionally slow-play to trap
+          return betAmounts.call;
+        }
       } else if (handStrength > 0.4) {
-        return betAmounts.call; // Call more with medium strength hands
-      } else if (handStrength > 0.25 && gameState.pokerRound() !== 'pre-flop') {
-        // Call with more marginal hands postflop
-        return gameState.toCall() <= gameState.smallBlind * 6 ? betAmounts.call : betAmounts.fold;
-      } else if (handStrength < 0.15 && Math.random() < 0.1 && gameState.pokerRound() === 'river') {
-        // Occasionally bluff-raise on the river
-        return betAmounts.smallRaise;
+        // With medium-strong hands, be aggressive
+        return Math.random() < 0.7 ? betAmounts.smallRaise : betAmounts.call;
+      } else if (handStrength > 0.3) {
+        // With medium hands, mix calls with raises
+        if (gameState.pokerRound() === 'river') {
+          // Value bet more on the river
+          return Math.random() < 0.6 ? betAmounts.smallRaise : betAmounts.call;
+        }
+        return Math.random() < 0.4 ? betAmounts.smallRaise : betAmounts.call;
+      } else if (handStrength > 0.2 && gameState.toCall() <= gameState.smallBlind * 6) {
+        // With medium-weak hands, call if cheap
+        return betAmounts.call;
+      } else if (handStrength < 0.2) {
+        // With weak hands, mix in some bluffs
+        if (gameState.pokerRound() === 'river' && Math.random() < 0.25) {
+          return betAmounts.smallRaise; // Bluff on river
+        } else if ((gameState.pokerRound() === 'turn' || gameState.pokerRound() === 'flop') && Math.random() < 0.15) {
+          return betAmounts.smallRaise; // Semi-bluff on earlier streets
+        } else if (gameState.toCall() <= gameState.smallBlind * 2) {
+          return betAmounts.call; // Call very cheap bets with any hand
+        } else {
+          return betAmounts.fold;
+        }
       } else {
         return betAmounts.fold;
       }
